@@ -5,18 +5,17 @@ import { supabase } from '../services/supabase';
 
 // Nombres de los candidatos
 const OpcionesCandidatos = [
-  { id: 'c_1', nombre: 'FRI' },
-  { id: 'c_2', nombre: 'UNE' },
-  { id: 'c_3', nombre: 'UNIDOS' },
-  { id: 'c_4', nombre: 'SÚMATE' },
-  { id: 'c_5', nombre: 'PPS' },
-  { id: 'c_6', nombre: 'PATRIA' },
-  { id: 'c_7', nombre: 'NGP' },
+  { id: 'c_1', nombre: 'UNIDOS' },
+  { id: 'c_2', nombre: 'NGP' },
+  { id: 'c_3', nombre: 'PPS' },
+  { id: 'c_4', nombre: 'UNE' },
+  { id: 'c_5', nombre: 'PATRIA' },
+  { id: 'c_6', nombre: 'MTS' },
+  { id: 'c_7', nombre: 'SÚMATE' },
   { id: 'c_8', nombre: 'LIBRE' },
-  { id: 'c_9', nombre: 'MAS-IPSP' },
-  { id: 'c_10', nombre: 'CC' },
-  { id: 'c_11', nombre: 'UCS' },
-  { id: 'c_12', nombre: 'MTS' },
+  { id: 'c_9', nombre: 'ALIANZA' },
+  { id: 'c_10', nombre: 'FRI' },
+  { id: 'c_11', nombre: 'SOLUCIONES CON TODOS' },
 ];
 
 export default function Veedor() {
@@ -32,7 +31,7 @@ export default function Veedor() {
 
   const [votos, setVotos] = useState<any>({
     c_1: '', c_2: '', c_3: '', c_4: '', c_5: '', c_6: '', 
-    c_7: '', c_8: '', c_9: '', c_10: '', c_11: '', c_12: '', 
+    c_7: '', c_8: '', c_9: '', c_10: '', c_11: '',
     blancos: '', nulos: ''
   });
   
@@ -149,7 +148,7 @@ export default function Veedor() {
       alert('¡Acta guardada exitosamente!');
       setVotos({
         c_1: '', c_2: '', c_3: '', c_4: '', c_5: '', c_6: '', 
-        c_7: '', c_8: '', c_9: '', c_10: '', c_11: '', c_12: '', 
+        c_7: '', c_8: '', c_9: '', c_10: '', c_11: '',
         blancos: '', nulos: ''
       });
       setMesaSeleccionada('');

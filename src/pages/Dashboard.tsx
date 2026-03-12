@@ -1,36 +1,61 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, BarChart3, Users, CheckCircle } from 'lucide-react';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
-import { Pie } from 'react-chartjs-2';
+import { LogOut } from 'lucide-react';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js';
+import { Pie, Bar } from 'react-chartjs-2';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { supabase } from '../services/supabase';
 
-ChartJS.register(ArcElement, Tooltip, Legend, ChartDataLabels);
+ChartJS.register(ArcElement, Tooltip, Legend, ChartDataLabels, CategoryScale, LinearScale, BarElement, Title);
 
 // Nombres de los candidatos
 const OpcionesCandidatos = [
-  { id: 'c_1', nombre: 'FRI' },
-  { id: 'c_2', nombre: 'UNE' },
-  { id: 'c_3', nombre: 'UNIDOS' },
-  { id: 'c_4', nombre: 'SÚMATE' },
-  { id: 'c_5', nombre: 'PPS' },
-  { id: 'c_6', nombre: 'PATRIA' },
-  { id: 'c_7', nombre: 'NGP' },
-  { id: 'c_8', nombre: 'LIBRE' },
-  { id: 'c_9', nombre: 'MAS-IPSP' },
-  { id: 'c_10', nombre: 'CC' },
-  { id: 'c_11', nombre: 'UCS' },
-  { id: 'c_12', nombre: 'MTS' },
+  { id: 'c_1', partido: 'UNIDOS', candidato: 'Edwin Lopez Ticona' },
+  { id: 'c_2', partido: 'NGP', candidato: 'Omar Ledezma Rivera' },
+  { id: 'c_3', partido: 'PPS', candidato: 'Felix Quispe Calle' },
+  { id: 'c_4', partido: 'UNE', candidato: 'Victor Carvajal' },
+  { id: 'c_5', partido: 'PATRIA', candidato: 'Jesus Hinojosa' },
+  { id: 'c_6', partido: 'MTS', candidato: 'Milton Paichucama' },
+  { id: 'c_7', partido: 'SÚMATE', candidato: 'Roxana Moscoso' },
+  { id: 'c_8', partido: 'LIBRE', candidato: 'Gualberto Mercado AYATO' },
+  { id: 'c_9', partido: 'ALIANZA', candidato: 'Patricia Arce Guzman' },
+  { id: 'c_10', partido: 'FRI', candidato: 'Omar Amaya' },
+  { id: 'c_11', partido: 'SOLUCIONES CON TODOS', candidato: 'Alfredo Lucana' },
 ];
+
+const TOTAL_MESAS_VINTO = 176;
+
+// Función para generar relleno con franjas delgadas diagonales para Chart.js
+const createStripePattern = (baseColor: string, stripeColor: string) => {
+  if (typeof document === 'undefined') return baseColor;
+  const canvas = document.createElement('canvas');
+  // Canvas grande = más espacio blanco entre franjas delgadas
+  canvas.width = 20;
+  canvas.height = 20;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return baseColor;
+
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.lineWidth = 2; // Franja delgada (2px sobre 20px de tile = predomina el blanco)
+  ctx.strokeStyle = stripeColor;
+  ctx.beginPath();
+  ctx.moveTo(0, 20);
+  ctx.lineTo(20, 0);
+  ctx.moveTo(-10, 10);
+  ctx.lineTo(10, -10);
+  ctx.moveTo(10, 30);
+  ctx.lineTo(30, 10);
+  ctx.stroke();
+
+  return ctx.createPattern(canvas, 'repeat') || baseColor;
+};
 
 export default function Dashboard() {
   const navigate = useNavigate();
   
-  const [totalMesasTotales, setTotalMesasTotales] = useState(0);
   const [mesasEscrutadas, setMesasEscrutadas] = useState(0);
-  const [totalVotos, setTotalVotos] = useState(0);
-  
   const [resultados, setResultados] = useState<any[]>([]);
 
   useEffect(() => {
@@ -40,7 +65,6 @@ export default function Dashboard() {
     const subscription = supabase
       .channel('actas-channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'actas' }, (payload) => {
-        console.log('Nueva acta recibida:', payload.new);
         sumarActa(payload.new);
       })
       .subscribe();
@@ -51,11 +75,6 @@ export default function Dashboard() {
   }, []);
 
   const cargarDatosIniciales = async () => {
-    // Mesas Totales (Sumatoria de los recintos)
-    const { data: recintos } = await supabase.from('recintos').select('total_mesas');
-    const totMesas = recintos?.reduce((acc, r) => acc + (r.total_mesas || 0), 0) || 0;
-    setTotalMesasTotales(totMesas);
-    
     // Actas actuales
     const { data: actas } = await supabase.from('actas').select('*');
     if (actas) {
@@ -65,27 +84,27 @@ export default function Dashboard() {
   };
 
   const recalcularTotalesBase = (actasList: any[]) => {
-    let totVotosGenerales = 0;
-    const conteo = OpcionesCandidatos.map((c, index) => ({ id: c.id, nombre: c.nombre, votos: 0, color: generarColor(index) }));
-    // Añadimos blancos y nulos
-    conteo.push({ id: 'blancos', nombre: 'Blancos', votos: 0, color: '#94a3b8' });
-    conteo.push({ id: 'nulos', nombre: 'Nulos', votos: 0, color: '#64748b' });
+    const conteo = OpcionesCandidatos.map((c, index) => ({ 
+      id: c.id, 
+      partido: c.partido,
+      candidato: c.candidato,
+      votos: 0, 
+      color: generarColor(index),
+      perfil: `/candidatos/${c.id}.jpg` 
+    }));
     
     actasList.forEach(acta => {
-      totVotosGenerales += acta.total_votos || 0;
       conteo.forEach(c => {
         c.votos += acta[c.id] || 0;
       });
     });
     
-    setTotalVotos(totVotosGenerales);
     setResultados(conteo.sort((a, b) => b.votos - a.votos)); // Ordenados de mayor a menor
   };
 
   // Cuando llega un acta nueva vía WebSockets
   const sumarActa = (nuevaActa: any) => {
     setMesasEscrutadas(prev => prev + 1);
-    setTotalVotos(prev => prev + (nuevaActa.total_votos || 0));
     
     setResultados(prevResultados => {
       const nuevoConteo = prevResultados.map(item => ({
@@ -96,154 +115,209 @@ export default function Dashboard() {
     });
   };
 
-  // Tonos vibrantes predefinidos para máximo contraste
+  // Paleta de colores por orden del array OpcionesCandidatos (c_1...c_11)
+  // c_1=UNIDOS, c_2=NGP, c_3=PPS, c_4=UNE, c_5=PATRIA, c_6=MTS, c_7=SUMATE
+  // c_8=LIBRE, c_9=ALIANZA, c_10=FRI, c_11=SOLUCIONES
   const PaletaColores = [
-    '#e11d48', // Rose
-    '#2563eb', // Blue
-    '#16a34a', // Green
-    '#d97706', // Amber
-    '#9333ea', // Purple
-    '#0891b2', // Cyan
-    '#ea580c', // Orange
-    '#4f46e5', // Indigo
-    '#db2777', // Pink
-    '#ca8a04', // Yellow
-    '#059669', // Emerald
-    '#dc2626', // Red
+    createStripePattern('#ffffff', '#ff0000'), // 1. c_1 UNIDOS: blanco + franjas rojas delgadas
+    '#F9A132', // 2. c_2 NGP
+    '#eab308', // 3. c_3 PPS: amarillo
+    '#38bdf8', // 4. c_4 UNE: celeste
+    '#FF5B0D', // 5. c_5 Patria
+    '#22c55e', // 6. c_6 MTS: verde
+    '#a855f7', // 7. c_7 Sumate: purpura
+    '#0000ff', // 8. c_8 LIBRE: azul
+    createStripePattern('#ffffff', '#eab308'), // 9. c_9 ALIANZA: blanco + franjas amarillas delgadas
+    '#ff0000', // 10. c_10 FRI: rojo
+    '#f472b6', // 11. c_11 Soluciones: rosado
   ];
 
   const generarColor = (index: number) => PaletaColores[index % PaletaColores.length];
-
 
   const handleLogout = () => {
     navigate('/login');
   };
 
-  const chartData = {
-    labels: resultados.slice(0, 5).map(r => r.nombre).concat(resultados.length > 5 ? ['Otros'] : []),
+  const ganador = resultados.length > 0 ? resultados[0] : null;
+  const porcentajeEscrutinio = ((mesasEscrutadas / TOTAL_MESAS_VINTO) * 100).toFixed(1);
+
+  const pieChartData = {
+    labels: resultados.map(r => r.partido),
     datasets: [
       {
-        data: (() => {
-          const top5 = resultados.slice(0, 5).map(r => r.votos);
-          if (resultados.length > 5) {
-            const otrosVotos = resultados.slice(5).reduce((acc, curr) => acc + curr.votos, 0);
-            top5.push(otrosVotos);
-          }
-          return top5;
-        })(),
-        backgroundColor: resultados.slice(0, 5).map(r => r.color).concat(resultados.length > 5 ? ['#cbd5e1'] : []),
-        borderColor: '#ffffff',
+        data: resultados.map(r => r.votos),
+        backgroundColor: resultados.map(r => r.color),
+        borderColor: '#e2f0e6', // Borde verde clarito del dashboard para resaltar el blanco
         borderWidth: 2,
       },
     ],
   };
 
-  const chartOptions: any = {
+  const pieChartOptions: any = {
     maintainAspectRatio: false,
+    layout: {
+      padding: {
+        top: 40,
+        bottom: 60, // ← Más espacio abajo para separar la leyenda (color de partido) de la torta
+        left: 40,
+        right: 40
+      }
+    },
     plugins: {
       legend: {
         position: 'bottom',
+        labels: { boxWidth: 12, font: { size: 11 } }
       },
       datalabels: {
-        color: '#fff',
-        font: {
-          weight: 'bold',
-          size: 11
-        },
+        color: '#333',
+        font: { weight: 'bold', size: 11 },
+        align: 'end',
+        anchor: 'end',
+        offset: 8,
         formatter: (value: number, context: any) => {
-          if (value === 0) return null; // No mostrar 0%
-          const label = context.chart.data.labels[context.dataIndex];
+          if (value === 0) return null;
           const totalContext = context.chart.data.datasets[0].data.reduce((a: number, b: number) => a + b, 0);
           const percentage = ((value / totalContext) * 100).toFixed(1);
-          return `${label}\n${percentage}%`;
+          if (parseFloat(percentage) < 3) return null; // Ocultar labels de porciones muy pequeñas
+          const label = context.chart.data.labels[context.dataIndex];
+          return `${label} ${percentage}%`;
         },
-        textAlign: 'center',
-        textStrokeColor: 'rgba(0,0,0,0.5)',
-        textStrokeWidth: 3,
+      }
+    }
+  };
+
+  const barChartData = {
+    labels: resultados.map(r => r.partido),
+    datasets: [
+      {
+        label: 'Cantidad de Votos',
+        data: resultados.map(r => r.votos),
+        backgroundColor: resultados.map(r => r.color),
+        borderRadius: 4,
+      },
+    ],
+  };
+
+  const barChartOptions: any = {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      datalabels: {
+        anchor: 'end',
+        align: 'top',
+        color: '#333',
+        font: { weight: 'bold' },
+        formatter: (value: number) => value > 0 ? value.toLocaleString() : '',
+      }
+    },
+    scales: {
+      x: {
+        grid: { display: false }
+      },
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: 'Cantidad de Votos', color: '#666' }
       }
     }
   };
 
   return (
-    <div style={{ backgroundColor: '#f1f5f9', minHeight: '100vh' }}>
-      <header style={{ backgroundColor: 'white', padding: '1rem', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)' }}>
+    <div style={{ backgroundColor: '#e2f0e6', minHeight: '100vh', paddingBottom: '2rem' }}>
+      {/* HEADER: Colores de Vinto (Verde/Blanco) */}
+      <header style={{ backgroundColor: '#16a34a', color: 'white', padding: '1rem', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
         <div className="container flex justify-between items-center" style={{ padding: 0 }}>
-          <h1 className="title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <BarChart3 color="var(--primary)" />
-            Centro de Cómputos
-          </h1>
-          <button onClick={handleLogout} className="btn btn-primary" style={{ width: 'auto', padding: '0.5rem 1rem' }}>
-            <LogOut size={16} style={{ marginRight: '0.5rem' }} /> Salir
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 'bold' }}>Elecciones subnacionales Vinto 2026</h1>
+            <span style={{ fontSize: '0.9rem', opacity: 0.9 }}>Resultados Preliminares - Municipal: Alcalde</span>
+          </div>
+          <button onClick={handleLogout} className="btn" style={{ backgroundColor: 'white', color: '#16a34a', border: 'none', fontWeight: 'bold', padding: '0.5rem 1rem', width: 'auto' }}>
+            <LogOut size={16} style={{ marginRight: '0.5rem', display: 'inline' }} /> Salir
           </button>
         </div>
       </header>
 
       <div className="container mt-4">
-        {/* KPIs */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: 0 }}>
-            <div style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', padding: '1rem', borderRadius: '50%' }}>
-              <Users color="var(--primary)" size={24} />
-            </div>
-            <div>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 500, margin: 0 }}>Total Votos Escrutados</p>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>{totalVotos}</h2>
-            </div>
+        
+        {/* BARRA DE PROGRESO DE ESCRUTINIO */}
+        <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#333' }}>Estado de escrutinio</h3>
+            <span style={{ fontWeight: 'bold', color: '#16a34a' }}>{porcentajeEscrutinio}% Mesas Escrutadas: {mesasEscrutadas} / {TOTAL_MESAS_VINTO}</span>
           </div>
-          
-          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: 0 }}>
-            <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: '1rem', borderRadius: '50%' }}>
-              <CheckCircle color="var(--success)" size={24} />
-            </div>
-            <div>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 500, margin: 0 }}>Mesas Escrutadas</p>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
-                {mesasEscrutadas} / {totalMesasTotales} 
-                <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 400 }}>
-                  ({totalMesasTotales > 0 ? ((mesasEscrutadas / totalMesasTotales) * 100).toFixed(1) : 0}%)
-                </span>
-              </h2>
+          <div style={{ width: '100%', backgroundColor: '#e2e8f0', borderRadius: '9999px', height: '1.25rem', overflow: 'hidden' }}>
+            <div 
+              style={{ 
+                width: `${Math.min(parseFloat(porcentajeEscrutinio), 100)}%`, 
+                backgroundColor: '#16a34a', 
+                height: '100%', 
+                transition: 'width 1s ease-in-out',
+                display: 'flex',
+                alignItems: 'center',
+                paddingLeft: '0.5rem',
+                color: 'white',
+                fontSize: '0.8rem',
+                fontWeight: 'bold'
+              }}
+            >
+              {porcentajeEscrutinio}%
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'flex-start' }}>
-          {/* Chart */}
-          <div className="card" style={{ flex: '1 1 300px' }}>
-            <h3 style={{ marginBottom: '1rem' }}>Distribución de Votos (Top 5)</h3>
+        {/* SECTOR MEDIO: CANDIDATO GANADOR Y GRÁFICO DE TORTA */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+          
+          {/* IZQUIERDA: CANDIDATO GANADOR */}
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '2rem' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '1.5rem', color: '#333' }}>Candidato con mayor votación con el escrutinio actual</h3>
+            
+            <div style={{ 
+              width: '160px', height: '160px', 
+              borderRadius: '50%', 
+              border: '6px solid #16a34a',
+              padding: '4px',
+              marginBottom: '1rem',
+              backgroundColor: 'white',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+            }}>
+              <img 
+                src={ganador?.perfil || `https://ui-avatars.com/api/?name=Ganador&background=16a34a&color=fff&size=200`} 
+                alt="Candidato Ganador" 
+                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                onError={(e) => {
+                  /* Si no encuentra la imagen local, usa el avatar predeterminado de sus iniciales */
+                  (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${ganador?.candidato || 'Ganador'}&background=eaenec&color=16a34a&size=200`;
+                }}
+              />
+            </div>
+            
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', margin: '0 0 0.5rem 0', color: '#1f2937' }}>
+              {ganador && ganador.votos > 0 ? ganador.candidato : 'Esperando resultados...'}
+            </h2>
+            <p style={{ fontSize: '1.1rem', color: '#6b7280', margin: 0, fontWeight: 500 }}>
+              {ganador && ganador.votos > 0 ? ganador.partido : 'Partido Múltiple'}
+            </p>
+            {ganador && ganador.votos > 0 && (
+              <div style={{ marginTop: '1rem', backgroundColor: '#dcfce7', color: '#166534', padding: '0.5rem 1rem', borderRadius: '9999px', fontWeight: 'bold' }}>
+                {ganador.votos.toLocaleString()} Votos Totales
+              </div>
+            )}
+          </div>
+
+          {/* DERECHA: GRÁFICO DE TORTA */}
+          <div className="card" style={{ padding: '1.5rem' }}>
+            <h3 style={{ marginBottom: '1rem', textAlign: 'center' }}>Distribución de Votos Totales por Partido</h3>
             <div style={{ position: 'relative', height: '350px', width: '100%', display: 'flex', justifyContent: 'center' }}>
-              <Pie data={chartData} options={chartOptions} />
+              <Pie data={pieChartData} options={pieChartOptions} />
             </div>
           </div>
-          
-          {/* Table */}
-          <div className="card" style={{ flex: '2 1 400px' }}>
-            <h3 style={{ marginBottom: '1rem' }}>Resultados Detallados</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                    <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Posición</th>
-                    <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Candidato / Opción</th>
-                    <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>Votos</th>
-                    <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-muted)' }}>%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resultados.map((item, index) => {
-                    const porcentaje = totalVotos > 0 ? ((item.votos / totalVotos) * 100).toFixed(2) : '0';
-                    return (
-                      <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 'bold' }}>{index + 1}</td>
-                        <td style={{ padding: '0.75rem 0.5rem' }}>{item.nombre}</td>
-                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{item.votos.toLocaleString()}</td>
-                        <td style={{ padding: '0.75rem 0.5rem' }}>{porcentaje}%</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+        </div>
+
+        {/* SECTOR INFERIOR: GRÁFICO DE BARRAS */}
+        <div className="card" style={{ padding: '1.5rem' }}>
+          <h3 style={{ marginBottom: '1rem', textAlign: 'center' }}>Cantidad Total de Votos por Partido</h3>
+          <div style={{ position: 'relative', height: '350px', width: '100%' }}>
+            <Bar data={barChartData} options={barChartOptions} />
           </div>
         </div>
 
